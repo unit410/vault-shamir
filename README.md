@@ -6,7 +6,7 @@
 
 ```golang
 import (
-    "gitlab.com/polychainlabs/vault-shamir/shamir"
+    "gitlab.com/unit410/vault-shamir/shamir"
 )
 
 func main() {
@@ -19,4 +19,3 @@ func main() {
     recombinedSecret, err := shamir.Combine(shares)
 }
 ```
-
