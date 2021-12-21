@@ -3,11 +3,10 @@ package shamir
 import (
 	"crypto/rand"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	mathrand "math/rand"
 	"time"
-
-	"github.com/hashicorp/errwrap"
 )
 
 const (
@@ -17,6 +16,12 @@ const (
 	ShareOverhead = 1
 )
 
+// ErrZeroShare is returned when rand.Read returns 0
+var ErrZeroShare = errors.New("coefficients are zero")
+
+// ErrNonUniqueShare is returned when there are duplicate coefficients
+var ErrNonUniqueShare = errors.New("coefficients are not unique")
+
 // polynomial represents a polynomial of arbitrary degree
 type polynomial struct {
 	coefficients []uint8
@@ -25,6 +30,9 @@ type polynomial struct {
 // makePolynomial constructs a random polynomial of the given
 // degree but with the provided intercept value.
 func makePolynomial(intercept, degree uint8) (polynomial, error) {
+	// Choosing the degree and not degree+1 since we need to enforce uniqueness only to the coefficients and not
+	// the intercept
+	coefficientSet := make(map[byte]bool, degree)
 	// Create a wrapper
 	p := polynomial{
 		coefficients: make([]byte, degree+1),
@@ -36,6 +44,17 @@ func makePolynomial(intercept, degree uint8) (polynomial, error) {
 	// Assign random co-efficients to the polynomial
 	if _, err := rand.Read(p.coefficients[1:]); err != nil {
 		return p, err
+	}
+
+	// Safety check to ensure coefficients are non zero and unique
+	for i := 1; i < len(p.coefficients); i++ {
+		if p.coefficients[i] == 0 {
+			return p, ErrZeroShare
+		}
+		if ok := coefficientSet[p.coefficients[i]]; ok {
+			return p, ErrNonUniqueShare
+		}
+		coefficientSet[p.coefficients[i]] = true
 	}
 
 	return p, nil
@@ -190,7 +209,7 @@ func Split(secret []byte, parts, threshold int) ([][]byte, error) {
 	for idx, val := range secret {
 		p, err := makePolynomial(val, uint8(threshold-1))
 		if err != nil {
-			return nil, errwrap.Wrapf("failed to generate polynomial: {{err}}", err)
+			return nil, err
 		}
 
 		// Generate a `parts` number of (x,y) pairs
